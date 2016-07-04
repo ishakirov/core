@@ -59,9 +59,9 @@ class SplitterSTRPEDS : public SplitterDBS {
   std::vector<boost::asio::ip::udp::endpoint> bad_peers_;
 
 	// P2PSP TMS
-	const double kMaxTrust = 2.;
-	const double kIncr = .05;
-	const double kDecr = .05;
+	double maxTrust = 2.;
+	double incr = .05;
+	double decr = .05;
 	std::map<boost::asio::ip::udp::endpoint, int> peer_lifetimes_;
 	std::map<boost::asio::ip::udp::endpoint, std::set<boost::asio::ip::udp::endpoint> > peer_unique_complains_;
 	std::map<boost::asio::ip::udp::endpoint, double> peer_penalties_;
@@ -124,6 +124,12 @@ class SplitterSTRPEDS : public SplitterDBS {
 
 	double ComputePeerTrustValue(const boost::asio::ip::udp::endpoint &peer);
 	void RunTMS();
+	void SetMaxTrust(double maxTrust);
+	double GetMaxTrust();
+	void SetIncr(double incr);
+	double GetIncr();
+	void SetDecr(double decr);
+	double GetDecr();
 };
 }  // namespace p2psp
 

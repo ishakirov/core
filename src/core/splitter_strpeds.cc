@@ -509,7 +509,7 @@ void SplitterSTRPEDS::Start() {
 }
 
 double SplitterSTRPEDS::ComputePeerTrustValue(const boost::asio::ip::udp::endpoint &peer) {
-	return min(kMaxTrust, 1 + peer_lifetimes_[peer] * kIncr) - peer_unique_complains_[peer].size() * kDecr;
+	return min(maxTrust, 1 + peer_lifetimes_[peer] * incr) - peer_unique_complains_[peer].size() * decr;
 }
 
 void SplitterSTRPEDS::RunTMS() {
@@ -526,6 +526,30 @@ void SplitterSTRPEDS::RunTMS() {
 			}
 		}
 	}
+}
+
+void SplitterSTRPEDS::SetMaxTrust(double value) {
+	maxTrust = value;
+}
+
+double SplitterSTRPEDS::GetMaxTrust() {
+	return maxTrust;
+}
+
+void SplitterSTRPEDS::SetIncr(double value) {
+	incr = value;
+}
+
+double SplitterSTRPEDS::GetIncr() {
+	return incr;
+}
+
+void SplitterSTRPEDS::SetDecr(double value) {
+	decr = value;
+}
+
+double SplitterSTRPEDS::GetDecr() {
+	return decr;
 }
 
 }  // namespace p2psp
