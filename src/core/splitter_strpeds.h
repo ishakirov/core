@@ -1,5 +1,5 @@
 //
-//  splitter_strpe.h
+//  splitter_strpeds.h
 //  P2PSP
 //
 //  This code is distributed under the GNU General Public License (see
@@ -15,26 +15,30 @@
 #include <stdlib.h>
 #include <boost/asio.hpp>
 #include <boost/unordered_map.hpp>
+#include <boost/tokenizer.hpp>
+
+#include <map>
+#include <string>
+#include <vector>
+#include <set>
 #include <fstream>
+#include <exception>
+
 #include "../util/trace.h"
 #include "splitter_dbs.h"
 #include "common.h"
 #include "openssl/dsa.h"
-#include <exception>
-#include <boost/tokenizer.hpp>
 
 namespace p2psp {
 
 class null: public std::exception {
-public:
-	null(){}
-	~null(){}
+ public:
+  null() {}
+  ~null() {}
 };
-
 
 class SplitterSTRPEDS : public SplitterDBS {
  protected:
-  
   const int kDigestSize = 40;
   const int kGatherBadPeersSleep = 5;
   const bool kLogging = false;
@@ -49,10 +53,18 @@ class SplitterSTRPEDS : public SplitterDBS {
   std::ofstream log_file_;
   std::ifstream trusted_file_;
   int current_round_;
- 
+
   std::vector<boost::asio::ip::udp::endpoint> trusted_peers_;
   std::vector<boost::asio::ip::udp::endpoint> trusted_peers_discovered_;
   std::vector<boost::asio::ip::udp::endpoint> bad_peers_;
+
+	// P2PSP TMS
+	const double kMaxTrust = 2.;
+	const double kIncr = .05;
+	const double kDecr = .05;
+	std::map<boost::asio::ip::udp::endpoint, int> peer_lifetimes_;
+	std::map<boost::asio::ip::udp::endpoint, std::set<boost::asio::ip::udp::endpoint> > peer_unique_complains_;
+	std::map<boost::asio::ip::udp::endpoint, double> peer_penalties_;
 
   int gathering_counter_;
   int trusted_gathering_counter_;
@@ -61,8 +73,8 @@ class SplitterSTRPEDS : public SplitterDBS {
   int majority_ratio_;
 
   DSA* dsa_key;
-  
-  //endpoint -> position in the complains_ vector.
+
+  // endpoint -> position in the complains_ vector.
   std::map<boost::asio::ip::udp::endpoint, int> complains_map_;
 
   // Thread management
@@ -82,10 +94,9 @@ class SplitterSTRPEDS : public SplitterDBS {
   void RequestBadPeers(const boost::asio::ip::udp::endpoint &dest);
   void InitKey();
   std::vector<char> GetMessage(int chunk_number, const boost::asio::streambuf &chunk, const boost::asio::ip::udp::endpoint &dst);
-  //char* LongToHex(BIGNUM value);
 
   void AddTrustedPeer(const boost::asio::ip::udp::endpoint &peer);
-  //size_t SplitterDBS::ReceiveMessage(std::vector<char> &message, boost::asio::ip::udp::endpoint &endpoint) override;
+
   void ModerateTheTeam();
   void ProcessBadPeersMessage(const std::vector<char> &message, const boost::asio::ip::udp::endpoint &sender);
   void HandleBadPeerFromTrusted(const boost::asio::ip::udp::endpoint &bad_peer, const boost::asio::ip::udp::endpoint &sender);
@@ -96,7 +107,7 @@ class SplitterSTRPEDS : public SplitterDBS {
   void RefreshTPs();
   void PunishPeers();
   void PunishTPs();
-  
+
   void SetLogging(bool enabled);
   void SetPMPL(int probability);
   int GetPMPL();
@@ -107,13 +118,13 @@ class SplitterSTRPEDS : public SplitterDBS {
   std::string BuildLogMessage(const std::string &message);
 
   void IncrementUnsupportivityOfPeer(const boost::asio::ip::udp::endpoint &peer) override;
-  
-  //void SetLogging(bool enabled);
-  //void SetLogFile(const std::string &filename);
 
   // Thread management
   void Start();
-};
-}
 
-#endif  // defined P2PSP_CORE_SPLITTER_STRPEDS_H_
+	double ComputePeerTrustValue(const boost::asio::ip::udp::endpoint &peer);
+	void RunTMS();
+};
+}  // namespace p2psp
+
+#endif  // P2PSP_CORE_SPLITTER_STRPEDS_H_

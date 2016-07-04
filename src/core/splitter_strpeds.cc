@@ -1,5 +1,5 @@
 //
-//  splitter_strpe.cc
+//  splitter_strpeds.cc
 //  P2PSP
 //
 //  This code is distributed under the GNU General Public License (see
@@ -40,10 +40,6 @@ void SplitterSTRPEDS::HandleAPeerArrival(
 	serve_socket->close();
 
 	InsertPeer(boost::asio::ip::udp::endpoint(incoming_peer.address(),incoming_peer.port()));
-
-	//InsertPeer(
-	//		boost::asio::ip::udp::endpoint(incoming_peer.address(),
-	//				incoming_peer.port()));
 }
 
 void SplitterSTRPEDS::SendDsaKey(
@@ -68,15 +64,9 @@ void SplitterSTRPEDS::SendDsaKey(
 	std::stringstream message;
 	message << y << g << p << q;
 
-	/*
-	TRACE(
-			"Sending DSA Key => Size pub_key: " + to_string(strlen(y)) + " g "
-					+ to_string(strlen(g)) + " p " + to_string(strlen(p)) + " q "
-					+ to_string(strlen(q)) + " message: " + message.str());
-	*/
 	sock->send(asio::buffer(message.str()));
 
-    delete[] y; delete[] g; delete[] p; delete[] q;
+  delete[] y; delete[] g; delete[] p; delete[] q;
 }
 
 void SplitterSTRPEDS::GatherBadPeers() {
@@ -99,6 +89,7 @@ void SplitterSTRPEDS::GatherBadPeers() {
 asio::ip::udp::endpoint SplitterSTRPEDS::GetPeerForGathering() {
 	gathering_counter_ = (gathering_counter_ + 1) % peer_list_.size();
 	asio::ip::udp::endpoint peer = peer_list_[gathering_counter_];
+
 	return peer;
 }
 
@@ -141,7 +132,6 @@ void SplitterSTRPEDS::Run() {
 	thread t1(bind(&SplitterIMS::HandleArrivals, this));
 	thread t2(bind(&SplitterSTRPEDS::ModerateTheTeam, this));
 	thread t3(bind(&SplitterDBS::ResetCountersThread, this));
-	//thread t4(bind(&SplitterSTRPEDS::GatherBadPeers, this));
 
 	vector<char> message(2 + chunk_size_ + 40 + 40);
 	asio::ip::udp::endpoint peer;
@@ -153,13 +143,9 @@ void SplitterSTRPEDS::Run() {
 
 		try {
 			peer = peer_list_.at(peer_number_);
-			/*
-			 (*(uint16_t *)message.data()) = htons(chunk_number_);
 
-			 copy(asio::buffer_cast<const char *>(chunk.data()),
-			 asio::buffer_cast<const char *>(chunk.data()) + chunk.size(),
-			 message.data() + sizeof(uint16_t));
-			 */
+			// increment peer's lifetime
+			peer_lifetimes_[peer] += 1;
 
 			message = GetMessage(chunk_number_, chunk, peer);
 
@@ -204,8 +190,6 @@ void SplitterSTRPEDS::Run() {
 		}
 
 		chunk.consume(bytes_transferred);
-
-
 	}
 }
 
@@ -234,39 +218,15 @@ std::vector<char> SplitterSTRPEDS::GetMessage(int chunk_number,
 	std::vector<char> h(32);
 	Common::sha256(m, h);
 
-	//TRACE("HASH");
-
-
-	//std::string str(h.begin(), h.end());
-	//LOG("Chunk Number " + std::to_string(chunk_number) + " dest " + dst.address().to_string() + ":"+ std::to_string(dst.port()) +" HASH= " + str);
-
-	/*
-	LOG(" ----- MESSAGE ----- ");
-	std::string b(m.begin(), m.end());
-	LOG(b);
-	LOG(" ---- FIN MESSAGE ----");
-	*/
-
 	DSA_SIG *sig = DSA_do_sign((unsigned char*) h.data(), h.size(), dsa_key);
 
 	LOG("R: " << *(sig->r->d));
 	LOG("S: " << *(sig->s->d));
 
 	char* sigr = new char[40];
-	//char sigr[40];
 	char* sigs = new char[40];
-	//char sigs[40];
 	sigr = BN_bn2hex(sig->r);
 	sigs = BN_bn2hex(sig->s);
-
-	/*
-    LOG(" ---- SIGNATURES ----");
-    LOG(sigr);
-    LOG(sigs);
-    LOG(" ---- FIN SIGNATURES ----");
-	*/
-
-	//TRACE("SINGATURE");
 
 	std::vector<char> message(sizeof(uint16_t) + chunk_size_ + 40 + 40 + sizeof(uint32_t));
 
@@ -277,37 +237,15 @@ std::vector<char> SplitterSTRPEDS::GetMessage(int chunk_number,
 			message.data() + chunk_size_ + sizeof(uint16_t) + 40);
 	(*(uint32_t *) (message.data() + chunk_size_ + sizeof(uint16_t) + 40 + 40)) = htonl(current_round_);
 
-	/*
-	LOG(" ----- MESSAGE CON SIGNATURE ----- ");
-		std::string c(message.begin(), message.end());
-		LOG(c);
-	LOG(" ---- FIN MESSAGE ----");
-	 */
 	delete[] sigr; delete[] sigs;
 
 	return message;
-
 }
 
 void SplitterSTRPEDS::AddTrustedPeer(
 		const boost::asio::ip::udp::endpoint &peer) {
 	trusted_peers_.push_back(peer);
 }
-
-/*
- size_t SplitterDBS::ReceiveMessage(std::vector<char> &message, boost::asio::ip::udp::endpoint &endpoint) {
- system::error_code ec;
-
- size_t bytes_transferred =
- team_socket_.receive_from(asio::buffer(message), endpoint, 0, ec);
-
- if (ec) {
- ERROR("Unexepected error: " << ec.message());
- }
-
- return bytes_transferred;
- }
- */
 
 void SplitterSTRPEDS::ModerateTheTeam() {
 	// TODO: Check if something fails and a try catch statement has to be added
@@ -332,16 +270,9 @@ void SplitterSTRPEDS::ModerateTheTeam() {
 			 */
 			if (find(trusted_peers_.begin(), trusted_peers_.end(), sender)
 								!= trusted_peers_.end()) {
-
-				//uint16_t lost_chunk_number = GetLostChunkNumber(message);
-				//asio::ip::udp::endpoint bad_peer = GetLosser(lost_chunk_number);
-				//HandleBadPeerFromTrusted(bad_peer, sender);
-				//LOG("Complaint from TP (" << sender.port() <<") about lost chunk " << lost_chunk_number << " by " << bad_peer.port());
 				uint16_t lost_chunk_number = GetLostChunkNumber(message);
-				//trusted_peers_discovered_.push_back(sender);
 				ProcessLostChunk(lost_chunk_number, sender);
 			}
-
 		} else {
 			/*
 			 The peer wants to leave the team.
@@ -349,7 +280,6 @@ void SplitterSTRPEDS::ModerateTheTeam() {
 			 A !2-length payload means that the peer wants to go
 			 away.
 			 */
-
 			if (message.at(0) == 'B'){
 				LOG("Bad complaint received");
 
@@ -378,17 +308,16 @@ void SplitterSTRPEDS::ProcessBadPeersMessage(const std::vector<char> &message,
 	boost::asio::ip::udp::endpoint bad_peer;
 
 	boost::asio::ip::address ip_addr;
-    uint16_t port;
+  uint16_t port;
 
 	uint16_t bad_number = ntohs(*(uint16_t *) (message.data() + bad.size()));
 
-	 std::string s(message.begin(), message.end());
-	  LOG("Message List: " << s);
+	std::string s(message.begin(), message.end());
+	LOG("Message List: " << s);
 
 	LOG("Number of BAD: "+ std::to_string(bad_number));
 
 	for (int i = 0; i < bad_number; i++) {
-
 		in_addr ip_raw = *(in_addr *)(message.data() + bad.size() + sizeof(uint16_t) + (6*i));
 		ip_addr = boost::asio::ip::address::from_string(inet_ntoa(ip_raw));
 
@@ -405,9 +334,8 @@ void SplitterSTRPEDS::ProcessBadPeersMessage(const std::vector<char> &message,
 		if (std::find(trusted_peers_.begin(), trusted_peers_.end(), sender) != trusted_peers_.end()) {
 				HandleBadPeerFromTrusted(bad_peer, sender);
 		} else {
-				//HandleBadPeerFromRegular(bad_peer, sdr);
+				// TODO HandleBadPeerFromRegular(bad_peer, sdr);
 		}
-
 	}
 }
 
@@ -419,7 +347,6 @@ void SplitterSTRPEDS::HandleBadPeerFromTrusted(
 	      bad_peers_.end()) {
 		bad_peers_.push_back(bad_peer);
 	}
-	//PunishPeer(bad_peer, "by trusted");
 }
 
 void SplitterSTRPEDS::HandleBadPeerFromRegular(
@@ -447,8 +374,9 @@ void SplitterSTRPEDS::AddComplain(
 		complains_map_.insert(
 				std::pair<boost::asio::ip::udp::endpoint, int>(bad_peer,
 						complains_.size() - 1));
-
 	}
+
+	peer_unique_complains_[sender].insert(bad_peer);
 }
 
 void SplitterSTRPEDS::PunishPeer(const boost::asio::ip::udp::endpoint &peer,
@@ -466,7 +394,6 @@ void SplitterSTRPEDS::PunishPeer(const boost::asio::ip::udp::endpoint &peer,
 
 		RemovePeer(peer);
 		LOG("Peer: " << peer << " removed");
-
 	}
 }
 
@@ -474,68 +401,57 @@ void SplitterSTRPEDS::OnRoundBeginning(){
 	RefreshTPs();
 	PunishPeers();
 	PunishTPs();
+	RunTMS();
 }
 
-void SplitterSTRPEDS::RefreshTPs(){
-
+void SplitterSTRPEDS::RefreshTPs() {
 	trusted_peers_.clear();
 	trusted_file_.open("trusted.txt");
-	if(trusted_file_.is_open()){
+	if (trusted_file_.is_open()) {
 		std::string str;
-		while (std::getline(trusted_file_, str))
-			{
-
+		while (std::getline(trusted_file_, str)) {
 			  boost::char_separator<char> sep{":"};
 			  boost::tokenizer<boost::char_separator<char>> tok{str, sep};
 			  boost::tokenizer< boost::char_separator<char> >::iterator t = tok.begin();
 			  boost::asio::ip::address address = boost::asio::ip::address::from_string(*t);
 			  t++;
 			  uint16_t port = atoi((*t).c_str());
-			  //LOG("IP: " + address.to_string() + ":" + std::to_string(port));
 			  AddTrustedPeer(boost::asio::ip::udp::endpoint(address,port));
-
-			}
+		}
 		TRACE("TP list updated");
 		trusted_file_.close();
-	}else{
+	} else {
 			ERROR("trusted.txt doesn't exist");
 	}
-
 }
 
-void SplitterSTRPEDS::PunishPeers(){
+void SplitterSTRPEDS::PunishPeers() {
 	int r;
-	for (unsigned int i =0; i<bad_peers_.size(); i++) {
+	for (unsigned int i = 0; i < bad_peers_.size(); i++) {
 				r = rand() % 100 + 1;
-				if (r <= p_mpl_){
+				if (r <= p_mpl_) {
 					PunishPeer(bad_peers_[i], "by trusted");
 					bad_peers_.erase(remove(bad_peers_.begin(), bad_peers_.end(), bad_peers_[i]),
 												 bad_peers_.end());
 				}
 	}
-
 }
 
-void SplitterSTRPEDS::PunishTPs(){
+void SplitterSTRPEDS::PunishTPs() {
 	int r;
 	for (unsigned int i = 0; i<trusted_peers_discovered_.size(); i++) {
-				r = rand() % 100 + 1;
-				if (r <= p_tpl_){
-					PunishPeer(trusted_peers_discovered_[i], "by splitter");
-					trusted_peers_discovered_.erase(remove(trusted_peers_discovered_.begin(), trusted_peers_discovered_.end(), trusted_peers_discovered_[i]),
-							trusted_peers_discovered_.end());
-				}
+		r = rand() % 100 + 1;
+		if (r <= p_tpl_) {
+			PunishPeer(trusted_peers_discovered_[i], "by splitter");
+			trusted_peers_discovered_.erase(remove(trusted_peers_discovered_.begin(), trusted_peers_discovered_.end(), trusted_peers_discovered_[i]), trusted_peers_discovered_.end());
+		}
 	}
-
 }
 
-void SplitterSTRPEDS::IncrementUnsupportivityOfPeer(
-                                                const boost::asio::ip::udp::endpoint &peer) {
+void SplitterSTRPEDS::IncrementUnsupportivityOfPeer(const boost::asio::ip::udp::endpoint &peer) {
   bool peerExists = true;
-
   try {
-	  if (find(trusted_peers_.begin(), trusted_peers_.end(), peer)
-	  								== trusted_peers_.end()) {
+	  if (find(trusted_peers_.begin(), trusted_peers_.end(), peer) == trusted_peers_.end()) {
 		  losses_[peer] += 1;
 	  }
   } catch (std::exception e) {
@@ -546,27 +462,31 @@ void SplitterSTRPEDS::IncrementUnsupportivityOfPeer(
   if (peerExists) {
     TRACE("" << peer << " has lost " << to_string(losses_[peer]) << " chunks");
 
-    if (losses_[peer] > max_number_of_chunk_loss_) {
-    	if (std::find(bad_peers_.begin(), bad_peers_.end(), peer) ==
-    		      bad_peers_.end()) {
-    			bad_peers_.push_back(peer);
-    		}
+    if (
+			losses_[peer] > max_number_of_chunk_loss_ &&
+			std::find(bad_peers_.begin(), bad_peers_.end(), peer) == bad_peers_.end()
+		) {
+  			bad_peers_.push_back(peer);
     }
   }
 }
 
 void SplitterSTRPEDS::SetPMPL(int probability){
-	p_mpl_=probability;
+	p_mpl_ = probability;
 }
+
 int SplitterSTRPEDS::GetPMPL(){
 	return p_mpl_;
 }
+
 void SplitterSTRPEDS::SetPTPL(int probability){
-	p_tpl_=probability;
+	p_tpl_ = probability;
 }
+
 int SplitterSTRPEDS::GetPTPL(){
 	return p_tpl_;
 }
+
 void SplitterSTRPEDS::SetLogFile(const std::string &filename) {
   log_file_.open(filename);
 }
@@ -587,4 +507,25 @@ void SplitterSTRPEDS::Start() {
 	LOG("Start");
 	thread_.reset(new boost::thread(boost::bind(&SplitterSTRPEDS::Run, this)));
 }
+
+double SplitterSTRPEDS::ComputePeerTrustValue(const boost::asio::ip::udp::endpoint &peer) {
+	return min(kMaxTrust, 1 + peer_lifetimes_[peer] * kIncr) - peer_unique_complains_[peer].size() * kDecr;
 }
+
+void SplitterSTRPEDS::RunTMS() {
+	// clear penalties
+	for (auto const &it : peer_penalties_) {
+		peer_penalties_[it.first] = 0.0;
+	}
+
+	for (auto const &it : peer_unique_complains_) {
+		for (auto const &it2 : it.second) {
+			peer_penalties_[it2] += ComputePeerTrustValue(it.first);
+			if (peer_penalties_[it2] > peer_list_.size() / 2) {
+				PunishPeer(it2, "by TMS");
+			}
+		}
+	}
+}
+
+}  // namespace p2psp
